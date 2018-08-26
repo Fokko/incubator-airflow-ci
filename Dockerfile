@@ -20,8 +20,6 @@
 
 FROM ubuntu:xenial
 
-USER root
-
 ENV DEBIAN_FRONTEND noninteractive
 ENV LANGUAGE en_US.UTF-8
 ENV LANG en_US.UTF-8
@@ -29,7 +27,7 @@ ENV LC_ALL en_US.UTF-8
 ENV LC_CTYPE en_US.UTF-8
 ENV LC_MESSAGES en_US.UTF-8
 
-ENV HADOOP_VERSION 2.6.0
+ENV HADOOP_VERSION=2.6.0
 ENV HADOOP_DISTRO=cdh
 ENV HADOOP_HOME=/tmp/hadoop-${HADOOP_DISTRO}
 ENV HIVE_HOME=/tmp/hive
@@ -49,6 +47,8 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
       g++ \
       python-dev \
       python3-dev \
+      python-coverage \
+      python3-coverage \
       python-pip \
       python3-pip \
       python-setuptools \
@@ -74,6 +74,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
       libsasl2-dev \
       libsasl2-modules \
       locales \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 RUN sed -i 's/^# en_US.UTF-8 UTF-8$/en_US.UTF-8 UTF-8/g' /etc/locale.gen \
@@ -81,16 +82,12 @@ RUN sed -i 's/^# en_US.UTF-8 UTF-8$/en_US.UTF-8 UTF-8/g' /etc/locale.gen \
     && update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 
 # Install Hadoop
-RUN cd /tmp && \
-    wget -q https://archive.cloudera.com/cdh5/cdh/5/hadoop-${HADOOP_VERSION}-cdh5.11.0.tar.gz && \
-    tar xzf hadoop-${HADOOP_VERSION}-cdh5.11.0.tar.gz --strip-components 1 -C $HADOOP_HOME && \
-    rm hadoop-${HADOOP_VERSION}-cdh5.11.0.tar.gz
+RUN wget -q -O - https://archive.cloudera.com/cdh5/cdh/5/hadoop-${HADOOP_VERSION}-cdh5.11.0.tar.gz | \
+    tar -xzf - --strip-components 1 -C $HADOOP_HOME
 
 # Install Hive
-RUN cd /tmp && \
-    wget -q https://archive.cloudera.com/cdh5/cdh/5/hive-1.1.0-cdh5.11.0.tar.gz && \
-    tar xzf hive-1.1.0-cdh5.11.0.tar.gz --strip-components 1 -C $HIVE_HOME && \
-    rm hive-1.1.0-cdh5.11.0.tar.gz
+RUN wget -q -O - https://archive.cloudera.com/cdh5/cdh/5/hive-1.1.0-cdh5.11.0.tar.gz | \
+    tar -xzf - --strip-components 1 -C $HIVE_HOME
 
 # Install MiniCluster
 RUN cd /tmp && \
@@ -98,12 +95,28 @@ RUN cd /tmp && \
     unzip minicluster-1.1-SNAPSHOT-bin.zip -d /tmp && \
     rm minicluster-1.1-SNAPSHOT-bin.zip
 
-RUN adduser airflow && \
+RUN useradd -r -u 999 -g sudo airflow && \
+    usermod -a -G staff airflow && \
+    usermod -a -G root airflow && \
     echo "airflow ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/airflow && \
     chmod 0440 /etc/sudoers.d/airflow
 
 WORKDIR /home/airflow
 
 ENV PATH "$PATH:/tmp/hive/bin"
+
+RUN python3 -m pip install -U pip && \
+    python3 -m pip install -U setuptools wheel && \
+\
+    python -m pip install -U pip && \
+    python -m pip install -U setuptools wheel && \
+\
+    mkdir -p /home/airflow/ && \
+    chown -R airflow /home/airflow/ && \
+    chmod -R g+w /usr/local/lib/python* && \
+    chmod -R g+w /usr/local/bin/ && \
+    chmod -R g+w /usr/local/man/ && \
+    mkdir -p /usr/local/cx_Oracle-doc && \
+    chmod -R g+w /usr/local/cx_Oracle-doc
 
 USER airflow
